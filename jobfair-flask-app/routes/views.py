@@ -5,8 +5,8 @@ import pandas as pd
 import os
 from werkzeug.utils import secure_filename
 from utils.data_loader import load_students, load_companies
-from utils.assigner import assign_preferences, fill_with_industry_match, fill_zero_slots, run_pattern_a, rescue_zero_visits
-from utils.strict_assigner import run_strict_scheduler
+from utils.assigner import assign_preferences, fill_with_industry_match, fill_zero_slots, run_pattern_a, rescue_zero_visits, assign_zero_slots_by_score_with_replace_safe_loop
+from utils.strict_assigner import run_strict_scheduler, calc_score_from_assignment
 import random
 from flask import send_file
 from utils.diagnoser import build_diagnosis
@@ -77,8 +77,8 @@ def run_assignment():
         ]
 
         # ③ キャパと需要
-        total_capacity = cap * NUM_SLOTS * company_count
-        max_demand     = len(sids) * NUM_SLOTS
+        total_capacity = cap  * company_count
+        max_demand     = len(sids)
 
         # ④ 判定
         pattern = "A" if total_capacity > max_demand else "B"
@@ -98,12 +98,24 @@ def run_assignment():
             filled_step4_total += filled4
             
             filled_step5_total += filled5
+            
+
 
             # マージ
             student_schedule.update(schedule)
             student_score.update(score)
             student_assigned_companies.update(assigned)
             all_reason_logs.append(reasons)
+            
+            # 0人ブース補完
+            filled_zero_slots, remaining_zero_slots = assign_zero_slots_by_score_with_replace_safe_loop(
+                student_schedule, student_score, df_preference,
+                capacity, valid_companies, NUM_SLOTS
+            )
+            if remaining_zero_slots:
+                # 画面やログに警告を出す
+                print("以下の企業・スロットはどうしても0人です：", remaining_zero_slots)
+
             
             matched_cnt = sum(
                 1 for sid in sids
@@ -191,9 +203,11 @@ def run_assignment():
             
             rescue_zero_visits(schedule, capacity, valid_companies, NUM_SLOTS)
 
-            # 統一の出力形式に合わせて辞書更新 (score, reasonsは空でもOK)
+            # スコア計算
+            student_score.update(calc_score_from_assignment(schedule, df_preference))
+            
+            # 統一の出力形式に合わせて辞書更新
             student_schedule.update(schedule)
-            student_score.update({sid: 0 for sid in sids})
             student_assigned_companies.update({
                 sid: set(c for c in schedule[sid] if c not in [None, ""])
                 for sid in sids
@@ -308,7 +322,7 @@ def run_assignment():
     )
     output_df.reset_index(names="student_id", inplace=True)
     output_df["dept"] = output_df["student_id"].map(student_dept_map)
-    output_df["score"] = output_df.index.map(lambda sid: student_score.get(sid, 0))
+    output_df["score"] = output_df["student_id"].map(lambda sid: student_score.get(sid, 0))
     output_df.to_csv("schedule.csv", index=False)
     flash("割当を実行し、schedule.csvを更新しました。")
 
@@ -550,8 +564,10 @@ def stats():
             continue
 
         # （反映率は現状のままでOK）
-        matched = [a for a in assigned_pairs if a in original_pref_list]
+        assigned_companies = [company for _, company in assigned_pairs]
+        matched = [c for c in original_pref_list if c in assigned_companies]
         reflect_rate = 100 * len(matched) // len(original_pref_list)
+
 
         stats_data.append({
             "student_id": sid,

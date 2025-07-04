@@ -101,108 +101,124 @@ def run_pattern_a(df_preference, df_company, student_ids, dept_id, student_dept_
             filled_step4, filled_step5, reasons)
     
 
-def run_pattern_b(df_preference, df_company, student_ids, student_dept_map, cap, num_slots=4):
-    from .assigner import assign_preferences_b, adjust_continuous_slots, rescue_zero_visits, fill_with_industry_match, fill_zero_slots
-    import math
+def assign_zero_slots_by_score_with_replace_safe_loop(
+    student_schedule, student_score, df_preference, company_capacity,
+    valid_companies, NUM_SLOTS
+):
+    from utils.logger import find_company_zero_slots
+    pref_dict = df_preference.groupby("student_id").apply(
+        lambda df: {row["company_name"]: row["rank"] for _, row in df.iterrows()}
+    ).to_dict()
 
-    dept_id = student_dept_map.get(sid, "不明")
-    valid_companies = df_company[df_company["department_id"] == dept_id]["company_name"].tolist()
-    company_capacity = { cname: [cap] * num_slots for cname in valid_companies }
+    filled_total = 0
+    while True:
+        zero_slots = find_company_zero_slots(student_schedule, valid_companies, NUM_SLOTS)
+        if not zero_slots:
+            print("✅ 0人ブースゼロ達成！")
+            break
 
-    total_capacity = len(valid_companies) * cap * num_slots
-    max_slots = min(4, math.floor(total_capacity / len(student_ids)))
+        filled = 0
+        sorted_sids = sorted(student_score.items(), key=lambda x: -x[1])
 
-    # Step 1: 仮割当
-    temp_schedule = {sid: [None] * num_slots for sid in student_ids}
-    temp_assigned_companies = {sid: set() for sid in student_ids}
-    temp_weights = {sid: [0] * num_slots for sid in student_ids}
+        for company, slot in zero_slots:
+            assigned = False
+            for sid, _ in sorted_sids:
+                slots = student_schedule[sid]
+                # そのスロットが空いてるか
+                if slots[slot] is None:
+                    # まだ枠があれば割り当て
+                    student_schedule[sid][slot] = company
+                    company_capacity[company][slot] -= 1
 
-    for rank in range(1, max_slots+1):
-        df_ranked = df_preference[df_preference["rank"] == rank]
-        assign_preferences_b(df_ranked, point=(5 - rank),
-                              temp_schedule=temp_schedule,
-                              temp_assigned_companies=temp_assigned_companies,
-                              temp_weights=temp_weights,
-                              num_slots=num_slots, max_slots=max_slots)
-
-    # Step 2: 連続化 + キャパ反映
-    student_schedule, student_assigned_companies = adjust_continuous_slots(
-        temp_schedule, temp_weights, company_capacity, num_slots
-    )
-
-    # Step 3: 0訪問救済補完
-    rescue_zero_visits(student_schedule, company_capacity, valid_companies, num_slots)
-
-    # Step 4: 通常補完
-    filled_step4 = fill_with_industry_match(
-        student_schedule, student_assigned_companies,
-        company_capacity, df_company, valid_companies, num_slots, student_dept_map
-    )
-
-    filled_step5, reasons = fill_zero_slots(
-        student_schedule, {}, student_assigned_companies,
-        company_capacity, df_company, df_preference,
-        valid_companies, num_slots
-    )
-
-    return (student_schedule, {}, student_assigned_companies, company_capacity,
-            filled_step4, filled_step5, reasons)
-    
-
-    
-def assign_preferences_b(df_ranked, point, temp_schedule, temp_assigned_companies, temp_weights, num_slots, max_slots):
-    for company in df_ranked["company_name"].unique():
-        candidates = df_ranked[df_ranked["company_name"] == company]["student_id"].tolist()
-        for sid in candidates:
-            assigned_slots = [i for i, v in enumerate(temp_schedule[sid]) if v is not None]
-            if len(assigned_slots) >= max_slots:
-                continue
-            for slot in range(num_slots):
-                if temp_schedule[sid][slot] is None:
-                    temp_schedule[sid][slot] = company
-                    temp_assigned_companies[sid].add(company)
-                    temp_weights[sid][slot] = point  # ここが追加
+                    # スコア計算
+                    prefs = pref_dict.get(sid, {})
+                    rank = prefs.get(company)
+                    if rank == 1:
+                        student_score[sid] += 5
+                    elif rank == 2:
+                        student_score[sid] += 4
+                    elif rank == 3:
+                        student_score[sid] += 3
+                    elif rank == 4:
+                        student_score[sid] += 2
+                    else:
+                        student_score[sid] += 0
+                    filled += 1
+                    assigned = True
                     break
 
+                # 全部埋まっていた場合
+                elif all(v is not None for v in slots):
+                    # すでにこの企業がどこかに割当済みならスキップ
+                    if company in slots:
+                        continue
 
-def adjust_continuous_slots(temp_schedule, temp_weights, company_capacity, num_slots):
-    student_schedule = {}
-    student_assigned_companies = {}
+                    # 置き換え候補
+                    prefs = pref_dict.get(sid, {})
+                    current_ranks = [
+                        prefs.get(company_name, 99) if company_name else 99
+                        for company_name in slots
+                    ]
+                    # 希望外（99）優先、それ以外は順位大きいもの
+                    max_rank = max(current_ranks)
+                    idx_replace = current_ranks.index(max_rank)
+                    replaced_company = slots[idx_replace]
 
-    for sid, slots in temp_schedule.items():
-        assigned = [i for i, v in enumerate(slots) if v is not None]
-        if not assigned:
-            student_schedule[sid] = [None] * num_slots
-            student_assigned_companies[sid] = set()
-            continue
+                    replaced_is_real = replaced_company and replaced_company in valid_companies
+                    # この入替でreplaced_companyが0人ブースになるか確認
+                    will_be_zero = False
+                    if replaced_is_real:
+                        replaced_count = sum(
+                            replaced_company in student_schedule[other_sid]
+                            for other_sid in student_schedule if other_sid != sid
+                        )
+                        if replaced_count == 0:
+                            will_be_zero = True
+                    if will_be_zero:
+                        continue
 
-        min_slot = min(assigned)
-        length = len(assigned)
+                    # 厳密にcompany_capacityも戻す
+                    if replaced_is_real:
+                        replaced_slot = slots.index(replaced_company)
+                        company_capacity[replaced_company][replaced_slot] += 1
 
-        # スコア（希望反映度）順に整列して優先割当
-        success = False
-        for start in range(max(0, min_slot - (length - 1)), min_slot+1):
-            trial = list(range(start, start+length))
-            if max(trial) >= num_slots:
-                continue
-            score = sum(temp_weights[sid][i] for i in assigned)
-            # 全てキャパOKなら採用
-            if all(company_capacity[slots[i]][trial[j]] > 0 for j, i in enumerate(assigned)):
-                for j, i in enumerate(assigned):
-                    company_capacity[slots[i]][trial[j]] -= 1
-                student_schedule[sid] = [None] * num_slots
-                student_assigned_companies[sid] = set()
-                for j, i in enumerate(assigned):
-                    student_schedule[sid][trial[j]] = slots[i]
-                    student_assigned_companies[sid].add(slots[i])
-                success = True
-                break
+                    # 置き換え実施
+                    slots[idx_replace] = None
+                    student_schedule[sid][slot] = company
+                    company_capacity[company][slot] -= 1
+                    filled += 1
+                    assigned = True
 
-        if not success:
-            student_schedule[sid] = [None] * num_slots
-            student_assigned_companies[sid] = set()
+                    # スコア再計算（まず全部リセット→希望順位ごとに再加点）
+                    score = 0
+                    for cname in student_schedule[sid]:
+                        r = prefs.get(cname)
+                        if r == 1:
+                            score += 3
+                        elif r == 2:
+                            score += 2
+                        elif r == 3:
+                            score += 1
+                        elif r == 4:
+                            score += 1
+                        else:
+                            score += 0
+                    student_score[sid] = score
+                    break
+            if assigned:
+                continue  # 次の0人ブース
 
-    return student_schedule, student_assigned_companies
+        filled_total += filled
+        if filled == 0:
+            # これ以上補完できない場合はbreak
+            break
+
+    # 最終的に埋まらなかったブースを警告
+    zero_slots = find_company_zero_slots(student_schedule, valid_companies, NUM_SLOTS)
+    if zero_slots:
+        print(f"⚠️ 最後まで埋まらなかった0人ブース：{zero_slots}")
+    return filled_total, zero_slots
+
 
 def rescue_zero_visits(student_schedule, company_capacity, valid_companies, num_slots):
     filled = 0
