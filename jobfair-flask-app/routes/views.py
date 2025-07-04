@@ -5,9 +5,10 @@ import pandas as pd
 import os
 from werkzeug.utils import secure_filename
 from utils.data_loader import load_students, load_companies
+from utils.logger import find_company_zero_slots, find_zero_visit_students, find_underfilled_students
 from utils.assigner import assign_preferences, fill_with_industry_match, fill_zero_slots, run_pattern_a, rescue_zero_visits, assign_zero_slots_by_score_with_replace_safe_loop
-from utils.strict_assigner import run_strict_scheduler, calc_score_from_assignment
-import random
+from utils.strict_assigner import run_strict_scheduler, calc_score_from_assignment, redistribute_zero_slots_B, assign_zero_slots_hiScore_B
+from utils.redistributor import fill_remaining_gaps
 from flask import send_file
 from utils.diagnoser import build_diagnosis
 from pathlib import Path
@@ -23,7 +24,7 @@ ALLOWED_EXTENSIONS = {"csv"}
 STUDENTS_PATH  = Path("uploads/students.csv")
 COMPANIES_PATH = Path("uploads/companies.csv")
 
-NUM_SLOTS =4
+NUM_SLOTS =3
 
 @views.route("/admin/run", methods=["POST"])
 def run_assignment():
@@ -115,6 +116,10 @@ def run_assignment():
             if remaining_zero_slots:
                 # 画面やログに警告を出す
                 print("以下の企業・スロットはどうしても0人です：", remaining_zero_slots)
+            
+            gap_filled = fill_remaining_gaps(student_schedule, capacity, NUM_SLOTS)
+            underfilled = find_underfilled_students(student_schedule, NUM_SLOTS)
+            print(f"🎯 GAP補完 {gap_filled} コマ → 未充足 {len(underfilled)} 人")
 
             
             matched_cnt = sum(
@@ -173,9 +178,6 @@ def run_assignment():
                 header=not os.path.exists("diagnosis.csv")  # 最初の学科だけヘッダ
             )
             
-            from utils.logger import (
-                find_company_zero_slots, find_zero_visit_students, find_underfilled_students
-            )
 
             # --- 会社側 0人スロット ------------------------------
             zero_slots = find_company_zero_slots(schedule, valid_companies, NUM_SLOTS)
@@ -196,14 +198,38 @@ def run_assignment():
         if pattern == "B":
             print(f"=================================[{dept}] パターン B で割当実行=============================================")
             import random
+            import math
             random.shuffle(sids)   # ← 早い者勝ち防止（方法 A）
             schedule, capacity, unassigned = run_strict_scheduler(
                 df_dept_pref, df_dept_company, sids, dept, cap, NUM_SLOTS
             )
             
             rescue_zero_visits(schedule, capacity, valid_companies, NUM_SLOTS)
+            
+            # 暫定スコアを入れておく
+            student_score.update(calc_score_from_assignment(schedule, df_preference))
 
-            # スコア計算
+            # ① max_slots を計算
+            max_slots = min(NUM_SLOTS, math.floor(len(valid_companies)*cap*NUM_SLOTS/len(sids)))
+
+
+            # ② 不足学生優先 + 連続枠維持で 0人ブース削減
+            filled_1, remain_1 = redistribute_zero_slots_B(
+                schedule, capacity, df_preference,
+                valid_companies, max_slots, NUM_SLOTS
+            )
+
+            # ③ スコア高い順・置換ありで最終ゼロ潰し
+            filled_2, remain_2 = assign_zero_slots_hiScore_B(
+                schedule, student_score,               # ← A で暫定値入り
+                capacity, valid_companies,
+                df_preference, NUM_SLOTS
+            )
+
+            if remain_2:
+                print(f"⚠️ 埋まらなかった 0人ブース {len(remain_2)} 件 → {remain_2[:10]}")
+
+            # ④ ここで最終スコアを再計算
             student_score.update(calc_score_from_assignment(schedule, df_preference))
             
             # 統一の出力形式に合わせて辞書更新
@@ -257,9 +283,6 @@ def run_assignment():
                 header=not os.path.exists("diagnosis.csv")
             )
             
-            from utils.logger import (
-                find_company_zero_slots, find_zero_visit_students, find_underfilled_students
-            )
 
             # --- 会社側 0人スロット ------------------------------
             zero_slots = find_company_zero_slots(schedule, valid_companies, NUM_SLOTS)

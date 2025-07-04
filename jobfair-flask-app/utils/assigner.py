@@ -47,7 +47,7 @@ def assign_preferences(df_ranked, point, student_schedule, student_score,
     print(f"✅ {phase_label} の割当完了")
 
 
-def run_pattern_a(df_preference, df_company, student_ids, dept_id, student_dept_map, cap, NUM_SLOTS=4):
+def run_pattern_a(df_preference, df_company, student_ids, dept_id, student_dept_map, cap, NUM_SLOTS=3):
     from .assigner import assign_preferences, fill_with_industry_match
 
     # --- Step 0: 初期化 ---
@@ -278,7 +278,7 @@ def fill_with_industry_match(student_schedule, student_assigned_companies,
 def fill_zero_slots(student_schedule, student_score, student_assigned_companies,
                     company_capacity, df_company, df_preference,
                     valid_companies,          # ★ 追加
-                    num_slots=4):
+                    num_slots=3):
     """
     「0人ブース」を学科内企業だけで埋める
     """
