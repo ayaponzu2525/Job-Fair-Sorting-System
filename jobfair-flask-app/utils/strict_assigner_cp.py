@@ -4,38 +4,34 @@ import pandas as pd
 from typing import Dict, List, Tuple
 
 
+# ---------------------------------------------------------
+
 
 # ---------------------------------------------------------
 
 
-
 # ---------------------------------------------------------
-
-
-
-# ---------------------------------------------------------
-
 
 
 """
 CP‑SAT 版の“厳密割当”
 ----------------------------------
-現状のパターンB（学生数 > キャパ）で使用する。
+パターンB（学生数 > キャパ）で使用する CP-SAT 実装。
 
 **現在の実装範囲**
   * 1スロット1社
   * 同一企業の重複禁止
   * 企業キャパ制約
   * 学生ごとの max_slots 制約
+  * 学生の連続枠（飛びコマ禁止）
+  * 企業側 0人ブース禁止（ハード）
   * 学生希望スコア最大化（第1〜第4希望を 5,4,3,2 点）
 
 **未実装 / TODO**
-  * 学生の連続枠（飛びコマ禁止）
-  * 企業側 0人ブース禁止（ハード or ペナルティ）
   * 希望外を避けるペナルティ／公平性指標
   * Lexicographic 最適化 など上級設定
 
-最小構成で “まず解が返る” ことを優先している。
+まず解を返すことを優先したミニマム構成。
 """
 
 
@@ -78,10 +74,8 @@ def run_strict_scheduler_cp(
         raise ValueError("学生または企業が存在しません")
 
     # cap[c][t] を dict で作成
-    company_capacity: Dict[str, List[int]] = {
-        c: [cap] * num_slots for c in C
-    }
-    
+    company_capacity: Dict[str, List[int]] = {c: [cap] * num_slots for c in C}
+
     if max_slots is None:
         total_capacity = len(C) * cap * num_slots
         max_slots = min(num_slots, total_capacity // len(S))
@@ -112,11 +106,10 @@ def run_strict_scheduler_cp(
     for c in C:
         for t in T:
             model.Add(sum(x[s, t, c] for s in S) <= company_capacity[c][t])
-            
-    # 学生0訪問禁止        
-    for s in S:
-        model.Add(sum(x[s,t,c] for t in T for c in C) >= 1)   # 全員 1 コマ以上
 
+    # 学生0訪問禁止
+    for s in S:
+        model.Add(sum(x[s, t, c] for t in T for c in C) >= 1)  # 全員 1 コマ以上
 
     # 4) 学生 max_slots
     for s in S:
@@ -129,22 +122,21 @@ def run_strict_scheduler_cp(
         for t in T:
             model.Add(sum(x[s, t, c] for c in C) == y[s, t])
         model.Add(k[s] == sum(y[s, t] for t in T))
-        
+
     # --- ① 連続枠（飛びコマ禁止） --------------------------
     for s in S:
-        for t in range(num_slots - 2):          # num_slots=3 なら t=0 だけ
+        for t in range(num_slots - 2):  # num_slots=3 なら t=0 だけ
             # y[s,t] と y[s,t+2] が両方 1 なら 真ん中 y[s,t+1] も 1 にする
-            model.Add(y[s, t] + y[s, t+2] - y[s, t+1] <= 1)
+            model.Add(y[s, t] + y[s, t + 2] - y[s, t + 1] <= 1)
     # ------------------------------------------------------
 
-    
     # --- ② 企業側 0人ブース禁止（ハード） -------------------
     for c in C:
         for t in T:
-            if company_capacity[c][t] > 0:                       # スロット営業している企業だけ
+            if company_capacity[c][t] > 0:  # スロット営業している企業だけ
                 model.Add(sum(x[s, t, c] for s in S) >= 1)
-    
-    # ---------- 目的関数（希望スコア最大化） ----------
+
+    # ---------- 目的関数設定 (2 段階最適化) ----------
     score_map = _build_score_map(df_preference)
     objective_terms = []
     for s in S:
@@ -153,9 +145,29 @@ def run_strict_scheduler_cp(
                 points = score_map.get(s, {}).get(c, 0)
                 if points:
                     objective_terms.append(points * x[s, t, c])
+
+    # --- Phase 1 : 割当コマ数の合計を最大化 ---
+    model.Maximize(sum(k[s] for s in S))
+
+    solver = cp_model.CpSolver()
+    solver.parameters.max_time_in_seconds = time_limit_sec
+    solver.parameters.num_search_workers = 8
+
+    status = solver.Solve(model)
+
+    if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        print("[CP‑SAT] FEASIBLE 解なし。status =", cp_model.CpSolver().StatusName(status))
+        schedule = {s: [None] * num_slots for s in S}
+        unsat_students = list(S)
+        return schedule, company_capacity, unsat_students
+
+    best_total = sum(solver.Value(k[s]) for s in S)
+
+    # --- Phase 2 : 上記コマ数を固定して希望スコア最大化 ---
+    model.ClearObjective()
+    model.Add(sum(k[s] for s in S) == best_total)
     model.Maximize(sum(objective_terms))
 
-    # ---------- ソルバ実行 ----------
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = time_limit_sec
     solver.parameters.num_search_workers = 8
