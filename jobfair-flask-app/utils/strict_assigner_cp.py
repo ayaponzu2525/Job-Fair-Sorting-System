@@ -1,7 +1,7 @@
 from ortools.sat.python import cp_model
-import math
 import pandas as pd
 from typing import Dict, List, Tuple
+from utils.redistributor import fill_remaining_gaps
 
 
 # ---------------------------------------------------------
@@ -17,6 +17,8 @@ from typing import Dict, List, Tuple
 CP‑SAT 版の“厳密割当”
 ----------------------------------
 パターンB（学生数 > キャパ）で使用する CP-SAT 実装。
+2 段階最適化で (1) 割当コマ数を最大化 → (2) 希望スコアを最大化。
+余ったキャパは fill_remaining_gaps() で貪欲に補完する。
 
 **現在の実装範囲**
   * 1スロット1社
@@ -31,7 +33,7 @@ CP‑SAT 版の“厳密割当”
   * 希望外を避けるペナルティ／公平性指標
   * Lexicographic 最適化 など上級設定
 
-まず解を返すことを優先したミニマム構成。
+まず解を返すことを優先したシンプル構成。
 """
 
 
@@ -115,7 +117,7 @@ def run_strict_scheduler_cp(
     for s in S:
         model.Add(sum(x[s, t, c] for t in T for c in C) <= max_slots)
 
-    # === ★★ 追加：y と k の定義 ========================
+    # --- 割当数カウント用変数 ----------------------------
     y = {(s, t): model.NewBoolVar(f"y_{s}_{t}") for s in S for t in T}
     k = {s: model.NewIntVar(0, num_slots, f"k_{s}") for s in S}
     for s in S:
@@ -184,6 +186,12 @@ def run_strict_scheduler_cp(
                     if solver.Value(x[s, t, c]):
                         schedule[s][t] = c
                         company_capacity[c][t] -= 1
+
+        # 余ったキャパがあれば貪欲に再配分
+        remaining = sum(sum(caps) for caps in company_capacity.values())
+        if remaining > 0:
+            fill_remaining_gaps(schedule, company_capacity, max_slots)
+
         unsat_students = [s for s, slots in schedule.items() if all(v is None for v in slots)]
         return schedule, company_capacity, unsat_students
 
