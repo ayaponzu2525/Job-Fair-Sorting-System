@@ -8,6 +8,7 @@ from utils.data_loader import load_students, load_companies
 from utils.logger import find_company_zero_slots, find_zero_visit_students, find_underfilled_students
 from utils.assigner import assign_preferences, fill_with_industry_match, fill_zero_slots, run_pattern_a, rescue_zero_visits, assign_zero_slots_by_score_with_replace_safe_loop
 from utils.strict_assigner import run_strict_scheduler, calc_score_from_assignment, redistribute_zero_slots_B, assign_zero_slots_hiScore_B
+from utils.cross_adjuster import adjust_overflow_assignments
 from utils.strict_assigner_cp import run_strict_scheduler_cp
 from utils.redistributor import fill_remaining_gaps
 from flask import send_file
@@ -51,6 +52,7 @@ def run_assignment():
     # 各学科ごとのログ用辞書
     dept_log_summary = {}  # {dept: {"step4": X, "step5": Y}}
     cross_total = 0
+    dept_patterns = {}
 
 
     # 学科ごとにグループ化
@@ -84,6 +86,7 @@ def run_assignment():
 
         # ④ 判定
         pattern = "A" if total_capacity > max_demand else "B"
+        dept_patterns[dept] = pattern
 
         # ⑤ デバッグ出力
         print(f"[DEBUG] {dept: <15} 企業数={company_count:2d}  学生数={len(sids):3d}  "
@@ -355,6 +358,18 @@ def run_assignment():
        f"{sum(d.get('cross_pref', 0) for d in dept_log_summary.values())} 件 ===")
     print(f"=== 全学科 cross_assign 合計: {total_cross_assign} 件 ===")
 
+
+    # --- Post adjust across departments ---
+    adjust_overflow_assignments(
+        student_schedule,
+        student_score,
+        student_dept_map,
+        df_company,
+        cap,
+        NUM_SLOTS,
+        dept_patterns,
+    )
+    student_score.update(calc_score_from_assignment(student_schedule, df_preference))
 
 
     # --- CSV出力 ---
