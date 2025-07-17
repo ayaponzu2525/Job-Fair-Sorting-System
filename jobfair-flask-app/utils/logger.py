@@ -39,6 +39,16 @@ def find_company_zero_slots(student_schedule, valid_companies, num_slots=4):
                 count[(c, s)] += 1
     return [k for k, v in count.items() if v == 0]
 
+# --- 会社側：割当数サマリ ---------------------------------------
+def summarize_company_assignments(student_schedule, valid_companies, num_slots=4):
+    """各企業・各スロットの割当人数を返す dict[c] -> [slot0, slot1, ...]"""
+    summary = {c: [0] * num_slots for c in valid_companies}
+    for slots in student_schedule.values():
+        for s, c in enumerate(slots):
+            if c and c in summary:
+                summary[c][s] += 1
+    return summary
+
 # --- 学生側：0訪問検出 -----------------------------------------
 def find_zero_visit_students(student_schedule):
     """全コマ None の学生IDを返す [sid, ...]"""

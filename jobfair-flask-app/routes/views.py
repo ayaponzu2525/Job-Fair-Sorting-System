@@ -186,6 +186,10 @@ def run_assignment():
                 print(f"❗ {dept}: 企業側 0人スロット {len(zero_slots)} 件 → {zero_slots[:10]}")
             else:
                 print(f"✅ {dept}: 企業側 0人スロットなし")
+            from utils.logger import summarize_company_assignments
+            summary = summarize_company_assignments(schedule, valid_companies, NUM_SLOTS)
+            for cname, counts in summary.items():
+                print(f"[LOG] {cname} assigned={counts}")
 
             # --- 学生側 0訪問 -------------------------------
             zero_visit = find_zero_visit_students(schedule)
@@ -301,6 +305,10 @@ def run_assignment():
                 print(f"❗ {dept}: 企業側 0人スロット {len(zero_slots)} 件 → {zero_slots[:10]}")
             else:
                 print(f"✅ {dept}: 企業側 0人スロットなし")
+            from utils.logger import summarize_company_assignments
+            summary = summarize_company_assignments(schedule, valid_companies, NUM_SLOTS)
+            for cname, counts in summary.items():
+                print(f"[LOG] {cname} assigned={counts}")
 
             # --- 学生側 0訪問 -------------------------------
             zero_visit = find_zero_visit_students(schedule)
