@@ -8,6 +8,7 @@ from utils.data_loader import load_students, load_companies
 from utils.logger import find_company_zero_slots, find_zero_visit_students, find_underfilled_students
 from utils.assigner import assign_preferences, fill_with_industry_match, fill_zero_slots, run_pattern_a, rescue_zero_visits, assign_zero_slots_by_score_with_replace_safe_loop
 from utils.strict_assigner import run_strict_scheduler, calc_score_from_assignment, redistribute_zero_slots_B, assign_zero_slots_hiScore_B
+from utils.strict_assigner_cp import run_strict_scheduler_cp
 from utils.redistributor import fill_remaining_gaps
 from flask import send_file
 from utils.diagnoser import build_diagnosis
@@ -196,38 +197,48 @@ def run_assignment():
             print(f"[DEBUG] cross_pref={cross_pref_cnt}, cross_assign={cross_assign_cnt}")
 
         if pattern == "B":
-            print(f"=================================[{dept}] パターン B で割当実行=============================================")
-            import random
-            import math
-            random.shuffle(sids)   # ← 早い者勝ち防止（方法 A）
-            schedule, capacity, unassigned = run_strict_scheduler(
-                df_dept_pref, df_dept_company, sids, dept, cap, NUM_SLOTS
-            )
+            print(f"==== [{dept}] パターン B で CP-SAT 実行 ====")
             
-            rescue_zero_visits(schedule, capacity, valid_companies, NUM_SLOTS)
-            
-            # 暫定スコアを入れておく
+            # ③ キャパと需要
+            total_capacity = cap * company_count * NUM_SLOTS    # ← スロット数も掛ける
+            max_demand     = len(sids)
+
+            # ④ 初期 max_slots を計算
+            initial_max_slots = total_capacity // max_demand    # 整数割
+            if initial_max_slots < 1:
+                print(f"⚠️ {dept}: キャパ不足で全員 1 コマも確保できません。CP-SATはスキップ")
+                # schedule を None だけで埋めて終わる
+                schedule = {sid: [None] * NUM_SLOTS for sid in sids}
+                capacity = {c: [cap] * NUM_SLOTS for c in valid_companies}
+                unassigned = list(sids)
+                # あとは従来のログ処理へ
+                ...
+                continue           # 次の学科へ
+
+
+            # ★ CP-SAT 呼び出し               
+            try:
+                schedule, capacity, unassigned = run_strict_scheduler_cp(
+                    df_dept_pref, df_dept_company, sids,
+                dept, cap, NUM_SLOTS,
+                max_slots=initial_max_slots
+                )
+            except Exception as e:
+                print("CP-SATエラー:", e)
+                schedule = {sid: [None] * NUM_SLOTS for sid in sids}
+                capacity = {c: [cap] * NUM_SLOTS for c in valid_companies}
+                unassigned = list(sids)
+
+
+            # ---- 旧ヒューリスティック系は呼ばない ----
             student_score.update(calc_score_from_assignment(schedule, df_preference))
+            student_schedule.update(schedule)
+            student_assigned_companies.update({
+                sid: {c for c in schedule[sid] if c}   # None を除外
+                for sid in sids
+            })
 
-            # ① max_slots を計算
-            max_slots = min(NUM_SLOTS, math.floor(len(valid_companies)*cap*NUM_SLOTS/len(sids)))
-
-
-            # ② 不足学生優先 + 連続枠維持で 0人ブース削減
-            filled_1, remain_1 = redistribute_zero_slots_B(
-                schedule, capacity, df_preference,
-                valid_companies, max_slots, NUM_SLOTS
-            )
-
-            # ③ スコア高い順・置換ありで最終ゼロ潰し
-            filled_2, remain_2 = assign_zero_slots_hiScore_B(
-                schedule, student_score,               # ← A で暫定値入り
-                capacity, valid_companies,
-                df_preference, NUM_SLOTS
-            )
-
-            if remain_2:
-                print(f"⚠️ 埋まらなかった 0人ブース {len(remain_2)} 件 → {remain_2[:10]}")
+            print(f"[{dept}] (CP-SAT) 割当完了 ― 未割当 {len(unassigned)} 人")
 
             # ④ ここで最終スコアを再計算
             student_score.update(calc_score_from_assignment(schedule, df_preference))
