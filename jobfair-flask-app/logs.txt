@@ -2,11 +2,71 @@ STEP 4: 学科マッチ補完数（合計） = 0
 STEP 5: 0人スロット補完数（合計） = 0
 
 --- 学科別 補完内訳 ---
+学科 臨床工学技士科 → STEP4: 0件, STEP5: 0件
+学科 専攻科 → STEP4: 0件, STEP5: 0件
+学科 情報学科 → STEP4: 0件, STEP5: 0件
+学科 医療心理科 → STEP4: 0件, STEP5: 0件
+学科 鍼灸スポーツ学科 → STEP4: 0件, STEP5: 0件
+学科 柔道整復スポーツ学科 → STEP4: 0件, STEP5: 0件
+学科 保健保育科 → STEP4: 0件, STEP5: 0件
+学科 精神保健福祉科 → STEP4: 0件, STEP5: 0件
+学科 介護福祉学科 → STEP4: 0件, STEP5: 0件
+学科 医療福祉総合学科 → STEP4: 0件, STEP5: 0件
+学科 鍼灸師学科 → STEP4: 0件, STEP5: 0件
+学科 柔道整復師学科 → STEP4: 0件, STEP5: 0件
+学科 診療放射線技師学科 → STEP4: 0件, STEP5: 0件
+学科 作業療法士学科 → STEP4: 0件, STEP5: 0件
+学科 医療総合学科 → STEP4: 0件, STEP5: 0件
+学科 臨床工学技士学科 → STEP4: 0件, STEP5: 0件
+学科 スポーツ科学科 → STEP4: 0件, STEP5: 0件
+学科 社会福祉専攻科 → STEP4: 0件, STEP5: 0件
+学科 理学療法士学科 → STEP4: 0件, STEP5: 0件
+学科 医療秘書 → STEP4: 0件, STEP5: 0件
+学科 視能訓練士学科 → STEP4: 0件, STEP5: 0件
+学科 鍼灸美容学科 → STEP4: 0件, STEP5: 0件
 学科 社会福祉科 → STEP4: 0件, STEP5: 0件
+学科 医療科学部 臨床工学科 → STEP4: 0件, STEP5: 0件
+学科 介護福祉科 → STEP4: 0件, STEP5: 0件
+学科 薬業科 → STEP4: 0件, STEP5: 0件
+学科 臨床検査技師科 → STEP4: 0件, STEP5: 0件
+学科 臨床工学技士専攻科 → STEP4: 0件, STEP5: 0件
+学科 言語聴覚士学科 → STEP4: 0件, STEP5: 0件
+学科 柔道整復スポーツトレーナー学科 → STEP4: 0件, STEP5: 0件
+学科 看護学科 → STEP4: 0件, STEP5: 0件
 
 --- 補完理由一覧 ---
 
 --- 学科外希望／割当件数 ---
+学科 臨床工学技士科 → cross_pref = 0 件, cross_assign = 0 件
+学科 専攻科 → cross_pref = 0 件, cross_assign = 0 件
+学科 情報学科 → cross_pref = 0 件, cross_assign = 0 件
+学科 医療心理科 → cross_pref = 0 件, cross_assign = 0 件
+学科 鍼灸スポーツ学科 → cross_pref = 0 件, cross_assign = 0 件
+学科 柔道整復スポーツ学科 → cross_pref = 0 件, cross_assign = 0 件
+学科 保健保育科 → cross_pref = 0 件, cross_assign = 0 件
+学科 精神保健福祉科 → cross_pref = 0 件, cross_assign = 0 件
+学科 介護福祉学科 → cross_pref = 0 件, cross_assign = 0 件
+学科 医療福祉総合学科 → cross_pref = 0 件, cross_assign = 0 件
+学科 鍼灸師学科 → cross_pref = 0 件, cross_assign = 0 件
+学科 柔道整復師学科 → cross_pref = 0 件, cross_assign = 0 件
+学科 診療放射線技師学科 → cross_pref = 0 件, cross_assign = 0 件
+学科 作業療法士学科 → cross_pref = 0 件, cross_assign = 0 件
+学科 医療総合学科 → cross_pref = 0 件, cross_assign = 0 件
+学科 臨床工学技士学科 → cross_pref = 0 件, cross_assign = 0 件
+学科 スポーツ科学科 → cross_pref = 0 件, cross_assign = 0 件
+学科 社会福祉専攻科 → cross_pref = 0 件, cross_assign = 0 件
+学科 理学療法士学科 → cross_pref = 0 件, cross_assign = 0 件
+学科 医療秘書 → cross_pref = 0 件, cross_assign = 0 件
+学科 視能訓練士学科 → cross_pref = 0 件, cross_assign = 0 件
+学科 鍼灸美容学科 → cross_pref = 0 件, cross_assign = 0 件
 学科 社会福祉科 → cross_pref = 0 件, cross_assign = 0 件
+学科 医療科学部 臨床工学科 → cross_pref = 0 件, cross_assign = 0 件
+学科 介護福祉科 → cross_pref = 0 件, cross_assign = 0 件
+学科 薬業科 → cross_pref = 0 件, cross_assign = 0 件
+学科 臨床検査技師科 → cross_pref = 0 件, cross_assign = 0 件
+学科 臨床工学技士専攻科 → cross_pref = 0 件, cross_assign = 0 件
+学科 言語聴覚士学科 → cross_pref = 0 件, cross_assign = 0 件
+学科 柔道整復スポーツトレーナー学科 → cross_pref = 0 件, cross_assign = 0 件
+学科 看護学科 → cross_pref = 0 件, cross_assign = 0 件
 
 全学科合計 cross_assign = 0 件

@@ -103,7 +103,7 @@ def run_pattern_a(df_preference, df_company, student_ids, dept_id, student_dept_
 
 def assign_zero_slots_by_score_with_replace_safe_loop(
     student_schedule, student_score, df_preference, company_capacity,
-    valid_companies, NUM_SLOTS
+    valid_companies, NUM_SLOTS, cap=10
 ):
     from utils.logger import find_company_zero_slots
     pref_dict = df_preference.groupby("student_id").apply(
@@ -111,8 +111,10 @@ def assign_zero_slots_by_score_with_replace_safe_loop(
     ).to_dict()
 
     filled_total = 0
+    loop_count = 0
     while True:
         zero_slots = find_company_zero_slots(student_schedule, valid_companies, NUM_SLOTS)
+        print(f"---- LOOP {loop_count} ---- zero_slots={len(zero_slots)}")
         if not zero_slots:
             print("✅ 0人ブースゼロ達成！")
             break
@@ -122,13 +124,17 @@ def assign_zero_slots_by_score_with_replace_safe_loop(
 
         for company, slot in zero_slots:
             assigned = False
+            print(f"  >>> 0人: {company} slot={slot}")
             for sid, _ in sorted_sids:
                 slots = student_schedule[sid]
                 # そのスロットが空いてるか
                 if slots[slot] is None:
+                    print(f"    学生 {sid} slot {slot} 空き → 割当")
                     # まだ枠があれば割り当て
                     student_schedule[sid][slot] = company
                     company_capacity[company][slot] -= 1
+                    assert company_capacity[company][slot] >= 0, f"キャパが負です: {company} slot={slot}"
+
 
                     # スコア計算
                     prefs = pref_dict.get(sid, {})
@@ -167,29 +173,39 @@ def assign_zero_slots_by_score_with_replace_safe_loop(
                     replaced_is_real = replaced_company and replaced_company in valid_companies
                     # この入替でreplaced_companyが0人ブースになるか確認
                     will_be_zero = False
+                
+                   
+                    # --- 置き換え時、そのスロットが 0 人になるかをチェック ---
+                    will_be_zero = False
                     if replaced_is_real:
-                        replaced_count = sum(
-                            replaced_company in student_schedule[other_sid]
+                        replaced_slot = idx_replace     # ← 今まさに抜こうとしているスロット
+
+                        # ① その企業・その slot に他学生がいるか？
+                        slot_count = sum(
+                            (student_schedule[other_sid][replaced_slot] == replaced_company)
                             for other_sid in student_schedule if other_sid != sid
                         )
-                        if replaced_count == 0:
+                        if slot_count == 0:
                             will_be_zero = True
                     if will_be_zero:
-                        continue
+                        continue        # この学生は選ばない
 
-                    # 厳密にcompany_capacityも戻す
+
+                    # ★ ここで replaced_company のキャパを戻す処理も忘れずに
                     if replaced_is_real:
-                        replaced_slot = slots.index(replaced_company)
                         company_capacity[replaced_company][replaced_slot] += 1
+                    
+                    # ここから新しい会社で入れ替え！
+                    slots[idx_replace] = None  # 1回だけ
+                    student_schedule[sid][slot] = company  # 1回だけ
+                    company_capacity[company][slot] -= 1  # 1回だけ
+                    assert company_capacity[company][slot] >= 0, f"キャパが負です: {company} slot={slot}"
 
-                    # 置き換え実施
-                    slots[idx_replace] = None
-                    student_schedule[sid][slot] = company
-                    company_capacity[company][slot] -= 1
+                    print(f"    学生 {sid} 入れ替え: {replaced_company} -> {company} at slot {slot}")
                     filled += 1
                     assigned = True
-
-                    # スコア再計算（まず全部リセット→希望順位ごとに再加点）
+                    
+                    # この下にスコア再計算
                     score = 0
                     for cname in student_schedule[sid]:
                         r = prefs.get(cname)
@@ -206,17 +222,19 @@ def assign_zero_slots_by_score_with_replace_safe_loop(
                     student_score[sid] = score
                     break
             if assigned:
-                continue  # 次の0人ブース
+                break  # 次の0人ブース
 
         filled_total += filled
+        print(f"  >> このループで埋まった数: {filled}")
         if filled == 0:
+            print("  !! もう埋まらない（break）")
             # これ以上補完できない場合はbreak
             break
 
     # 最終的に埋まらなかったブースを警告
     zero_slots = find_company_zero_slots(student_schedule, valid_companies, NUM_SLOTS)
     if zero_slots:
-        print(f"⚠️ 最後まで埋まらなかった0人ブース：{zero_slots}")
+        print(f"⚠️ 最後まで埋まらなかった0人ブース：{len(zero_slots)}")
     return filled_total, zero_slots
 
 

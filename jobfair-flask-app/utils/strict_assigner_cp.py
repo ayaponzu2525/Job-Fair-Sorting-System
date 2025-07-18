@@ -196,7 +196,7 @@ def run_strict_scheduler_cp(
 
         # --- 各企業の残キャパをログ出力 ----------------------
         for cname, caps in company_capacity.items():
-            print(f"[LOG] {cname} remaining: {caps} (total={sum(caps)})")
+            print(f"----------[残りLOG] {cname} remaining: {caps} (total={sum(caps)})---------")
 
         unsat_students = [s for s, slots in schedule.items() if all(v is None for v in slots)]
         return schedule, company_capacity, unsat_students

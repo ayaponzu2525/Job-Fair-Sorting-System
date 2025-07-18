@@ -103,7 +103,6 @@ def run_assignment():
             filled_step4_total += filled4
             
             filled_step5_total += filled5
-            
 
 
             # マージ
@@ -117,6 +116,7 @@ def run_assignment():
                 student_schedule, student_score, df_preference,
                 capacity, valid_companies, NUM_SLOTS
             )
+            print(f"🎯 STEP5: 0人スロット補完 {filled_zero_slots} コマ → 残り {len(remaining_zero_slots)} 件")
             if remaining_zero_slots:
                 # 画面やログに警告を出す
                 print("以下の企業・スロットはどうしても0人です：", remaining_zero_slots)
